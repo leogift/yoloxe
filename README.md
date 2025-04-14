@@ -83,3 +83,7 @@ python3 -m yoloxe.tools.onnx2rknn -m onnx_outputs/test.onnx --bgr
 * --bgr: bgr mode
 
 </details>
+
+## Pretrain
+- YOLOXE-regnet_x_400mf: https://pan.baidu.com/s/1PNDBVvZviUz82L-bFmkPPg?pwd=yxe4
+- YOLOXE-regnet_x_800mf: https://pan.baidu.com/s/1G5hnsmjjvew07FWekSORsQ?pwd=yxe8
