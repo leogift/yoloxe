@@ -9,7 +9,7 @@ import torchvision
 __all__ = [
     "filter_box",
     "postprocess",
-    "bboxes_diou",
+    "bboxes_iou",
     "matrix_iou",
     "adjust_points_anns",
     "xyxy2xywh",
