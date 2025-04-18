@@ -119,14 +119,14 @@ class IOULoss(nn.Module):
 
         return loss
 
-# oksloss: l1loss+bceloss
+# oksloss: sl1loss+bceloss
 class OKSLoss(nn.Module):
     def __init__(self, num_kpts, kpts_weight=None, reduction="none"):
         super().__init__()
         self.num_kpts = num_kpts
         kpts_weight = torch.tensor(kpts_weight) if kpts_weight is not None and len(kpts_weight)==num_kpts else torch.tensor([1]*num_kpts)
         kpts_weight = torch.clip(kpts_weight, 0.8, 3.6)
-        self.sigmas = (torch.tensor([0.89]*num_kpts) / 10) / kpts_weight
+        self.sigmas = torch.tensor([1/num_kpts]*num_kpts) / kpts_weight
         self.reduction = reduction
         self.dist_loss = nn.SmoothL1Loss(reduction="none")
         self.conf_loss = FocalLoss(reduction="none")
@@ -141,10 +141,10 @@ class OKSLoss(nn.Module):
         else:
             dist_x = self.dist_loss(kpts_pred[:, 0::2], kpts_target[:, 0::2])
             dist_y = self.dist_loss(kpts_pred[:, 1::2], kpts_target[:, 1::2])
-            dist = dist_x**2 + dist_y**2 # semi-l2 loss
+            dist = dist_x + dist_y
             bbox_area = torch.prod(bbox_targets[:, -2:], dim=1, keepdim=True)  # scale derived from bbox gt: w*h
             kpts_loss_factor = (torch.sum(kpts_conf_target != 0) + torch.sum(kpts_conf_target == 0)) / torch.clip(torch.sum(kpts_conf_target != 0), 1e-9)
-            oks = torch.exp(-dist / torch.clip(bbox_area * (4 * sigmas**2), 1e-9))
+            oks = torch.exp(-dist / torch.clip((bbox_area**0.5) * (sigmas**2), 1e-9))
             loss_kpts = kpts_loss_factor * ((1 - oks) * kpts_conf_target)
         loss_kpts = loss_kpts.mean(axis=1)
 
