@@ -4,8 +4,6 @@
 
 import argparse
 
-import cv2
-import numpy as np
 from rknn.api import RKNN
 
 def make_parser():
@@ -70,7 +68,7 @@ if __name__ == '__main__':
     # RKNN config
     print('--> Config model')
     rknn.config(mean_values=[input_mean], std_values=[input_std], \
-                quant_img_RGB2BGR=args.bgr, target_platform=args.platform, optimization_level=3, \
+                quant_img_RGB2BGR=args.bgr, target_platform=args.platform, optimization_level=2, \
                 quantized_algorithm="normal", \
                 enable_flash_attention=True, \
                 disable_rules=['fuse_mul_into_matmul']

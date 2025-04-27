@@ -72,7 +72,7 @@ class Exp(MyExp):
             pp_repeats = 0 if min(self.test_size[0], self.test_size[1])//32 <= 4 \
                 else (min(self.test_size[0], self.test_size[1])//32 - 4)//6 + 1
 
-            preproc = BaseNorm()
+            preproc = BaseNorm(trainable=True)
             backbone = Regnet(
                 self.model_name,
                 act=self.act,

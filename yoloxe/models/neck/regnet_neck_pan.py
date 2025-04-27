@@ -5,6 +5,7 @@ import torch
 from torch import nn
 
 from yoloxe.models.network_blocks import get_activation, C2PPLayer, C2aLayer
+from yoloxe.utils import initialize_weights
 
 import ssl
 context = ssl._create_unverified_context()
@@ -30,8 +31,7 @@ class RegnetNeckPAN(nn.Module):
         self.out_features = out_features
 
         # 加载预训练模型
-        self.model = torchvision.models.__dict__[model](weights='IMAGENET1K_V1', 
-            activation=get_activation(act))
+        self.model = torchvision.models.__dict__[model](weights='IMAGENET1K_V1')
 
         # 丢弃分类头
         del self.model.avgpool
@@ -65,6 +65,9 @@ class RegnetNeckPAN(nn.Module):
             n,
             act=act,
         )
+
+        initialize_weights(self.csp4)
+        initialize_weights(self.csp5)
         
 
     def forward(self, inputs):

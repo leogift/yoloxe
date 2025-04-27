@@ -50,8 +50,8 @@ class UncertaintyLoss(nn.Module):
         super().__init__()
         self.weight = nn.Parameter(torch.tensor(0.0), requires_grad=True)
 
-    def forward(self, loss):
-        return torch.exp(-self.weight)*loss + F.relu6(self.weight)
+    def forward(self, loss, factor=1):
+        return factor*torch.exp(-self.weight)*loss + F.relu(self.weight)
 
 # aiou/giou/ciou/diou
 class IOULoss(nn.Module):
@@ -119,13 +119,13 @@ class IOULoss(nn.Module):
 
         return loss
 
-# oksloss: sl1loss+bceloss
+# oksloss: l2loss+bceloss
 class OKSLoss(nn.Module):
     def __init__(self, num_kpts, kpts_weight=None, reduction="none"):
         super().__init__()
         self.num_kpts = num_kpts
         kpts_weight = torch.tensor(kpts_weight) if kpts_weight is not None and len(kpts_weight)==num_kpts else torch.tensor([1]*num_kpts)
-        kpts_weight = torch.clip(kpts_weight, 0.5, 2.0)
+        kpts_weight = torch.clip(kpts_weight, 0.5, 4.0)
         self.sigmas = torch.tensor([1/num_kpts]*num_kpts) / kpts_weight
         self.reduction = reduction
         self.dist_loss = nn.MSELoss(reduction="none")
@@ -142,7 +142,7 @@ class OKSLoss(nn.Module):
             dist = self.dist_loss(kpts_pred[:, 0::2], kpts_target[:, 0::2]) + self.dist_loss(kpts_pred[:, 1::2], kpts_target[:, 1::2])
             bbox_area = torch.prod(bbox_targets[:, -2:], dim=1, keepdim=True)  # scale derived from bbox gt: w*h
             kpts_loss_factor = (torch.sum(kpts_conf_target != 0) + torch.sum(kpts_conf_target == 0)) / torch.clip(torch.sum(kpts_conf_target != 0), 1e-9)
-            oks = torch.exp(-dist / torch.clip(bbox_area * (4*sigmas**2), 1e-9))
+            oks = torch.exp(-dist / torch.clip(2 * bbox_area * (sigmas**2), 1e-9))
             loss_kpts = kpts_loss_factor * ((1 - oks) * kpts_conf_target)
         loss_kpts = loss_kpts.mean(axis=1)
 
@@ -161,3 +161,4 @@ class OKSLoss(nn.Module):
             loss_kpts_conf = loss_kpts_conf.sum()
 
         return loss_kpts, loss_kpts_conf
+

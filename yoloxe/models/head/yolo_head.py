@@ -6,8 +6,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import loguru as logger
-
 from yoloxe.utils import meshgrid,initialize_weights, bboxes_iou
 
 from yoloxe.models.network_blocks import BaseConv
@@ -352,29 +350,24 @@ class YOLOHead(nn.Module):
         fg_masks = torch.cat(fg_masks, 0)
 
         num_fg = max(num_fg, 1)
-        iou_loss = (
-            self.iou_loss(bbox_preds.view(-1, 4)[fg_masks], bbox_targets)
-        ).sum() / num_fg
-        obj_loss = (
-            self.obj_loss(obj_preds.view(-1, 1), obj_targets)
-        ).sum() / num_fg
-        cls_loss = (
-            self.cls_loss(
-                cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets
-            )
-        ).sum() / num_fg
+        iou_loss = self.iou_loss(bbox_preds.view(-1, 4)[fg_masks], bbox_targets)
+        iou_loss = iou_loss.sum() / num_fg + iou_loss.max() * 0.1
+        obj_loss = self.obj_loss(obj_preds.view(-1, 1), obj_targets)
+        obj_loss = obj_loss.sum() / num_fg + obj_loss.max() * 0.1
+        cls_loss = self.cls_loss(cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets)
+        cls_loss = cls_loss.sum() / num_fg + cls_loss.max() * 0.1
 
         if not self.aux_head:
             # uncertainty loss
-            iou_loss = self.bbox_uncertainty(iou_loss)
+            iou_loss = self.bbox_uncertainty(iou_loss, 5)
             obj_loss = self.obj_uncertainty(obj_loss)
             cls_loss = self.cls_uncertainty(cls_loss)
 
-        loss = 5 * iou_loss + obj_loss + cls_loss
+        loss = iou_loss + obj_loss + cls_loss
 
         return {
             "total_loss": loss,
-            "iou_loss": 5 * iou_loss,
+            "iou_loss": iou_loss,
             "obj_loss": obj_loss,
             "cls_loss": cls_loss,
         }
@@ -444,7 +437,7 @@ class YOLOHead(nn.Module):
             gt_bboxes_per_image = gt_bboxes_per_image.cpu()
             bboxes_preds_per_image = bboxes_preds_per_image.cpu()
         pair_wise_ious = bboxes_iou(gt_bboxes_per_image, bboxes_preds_per_image, False)
-        pair_wise_ious_loss = ((1 - pair_wise_ious).clamp(min=0))**2 # 即使无交集，也要保证iou_loss为正
+        pair_wise_ious_loss = ((1 - pair_wise_ious).clamp(min=0) * 2)**2
 
         gt_cls_per_image = (
             F.one_hot(gt_classes.to(torch.int64), self.num_classes)
@@ -539,7 +532,8 @@ class YOLOHead(nn.Module):
                 cost[gt_idx], k=dynamic_ks[gt_idx].item(), largest=False
             )
             matching_matrix[gt_idx][pos_idx] = 1
-        del topk_ious, dynamic_ks, pos_idx
+            del pos_idx
+        del topk_ious, dynamic_ks
 
         anchor_matching_gt = matching_matrix.sum(0)
         # deal with the case that one anchor matches multiple ground-truths

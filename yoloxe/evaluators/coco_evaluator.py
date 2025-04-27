@@ -86,7 +86,6 @@ class COCOEvaluator:
     def evaluate(
         self, 
         model, 
-        half=False,
         decoder=None,
     ):
         """
@@ -106,10 +105,7 @@ class COCOEvaluator:
         if not is_main_process():
             return None
 	
-        tensor_type = torch.cuda.HalfTensor if half else torch.cuda.FloatTensor
         model = model.eval()
-        if half:
-            model = model.half()
         ids = []
         outputs_list = []
 
@@ -122,7 +118,7 @@ class COCOEvaluator:
             tqdm(self.dataloader)
         ):
             with torch.no_grad():
-                imgs = imgs.type(tensor_type)
+                imgs = imgs.type(torch.cuda.FloatTensor)
 
                 # skip the last iters since batchsize might be not enough for batch inference
                 is_time_record = cur_iter < len(self.dataloader) - 1
@@ -237,13 +233,12 @@ class COCOEvaluator:
         ):
             if output is None:
                 continue
+            output = output.cpu()
+            
+            bboxes = output[:, 0:4]
+            cls = output[:, 6]
+            scores = output[:, 4] * output[:, 5]
 
-            if self.num_kpts > 0:
-                bboxes, cls, scores, kpts, kpts_conf = output
-            else:
-                bboxes, cls, scores = output
-
-            bboxes = bboxes.cpu().numpy()
             # preprocessing: resize
             scale = min(
                 self.img_size[0] / float(img_h), self.img_size[1] / float(img_w)
@@ -251,13 +246,10 @@ class COCOEvaluator:
             bboxes /= scale
             bboxes = xyxy2xywh(bboxes)
 
-            cls = cls.cpu().numpy()
-            scores = scores.cpu().numpy()
-
             if self.num_kpts > 0:
-                kpts = kpts.cpu().numpy() # N x 2k
+                kpts = output[:, 7 : 7+self.num_kpts*2] # N x 2k
                 kpts /= scale
-                kpts_conf = kpts_conf.cpu().numpy() # N x k
+                kpts_conf = output[:, 7+self.num_kpts*2 : 7+self.num_kpts*2+self.num_kpts] # N x k
                 keypoints = torch.zeros([kpts.shape[0], self.num_kpts*3])
                 for i in range(self.num_kpts):
                     keypoints[:, i*3] = kpts[:, i*2]

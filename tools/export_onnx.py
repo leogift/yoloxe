@@ -24,7 +24,7 @@ def make_parser():
         "--output", default="output", type=str, help="output node name of onnx model"
     )
     parser.add_argument(
-        "-s", "--opset", default=16, type=int, help="onnx opset version"
+        "-s", "--opset", default=10, type=int, help="onnx opset version"
     )
     parser.add_argument("-b", "--batch-size", type=int, default=1, help="batch size")
     parser.add_argument("--no-onnxsim", action="store_true", help="use onnxsim or not")
@@ -79,6 +79,8 @@ def main():
         input_names=[args.input],
         output_names=args.output,
         opset_version=args.opset,
+        do_constant_folding=True,
+        verbose=False,
     )
     logger.info("generated onnx model named {}".format(args.output_name))
 

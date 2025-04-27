@@ -99,7 +99,7 @@ def get_affine_matrix(
     if scale <= 0.0:
         raise ValueError("Argument scale should be positive")
 
-    R = cv2.getRotationMatrix2D(angle=angle, center=(0, 0), scale=scale)
+    R = cv2.getRotationMatrix2D(angle=angle, center=(twidth/2, theight/2), scale=scale)
 
     M = np.ones([2, 3])
     # Shear
@@ -189,11 +189,11 @@ def _mirror_bboxes(image, boxes, prob=0.5):
     height, width, _ = image.shape
     if random.random() < prob:
         image = image[:, ::-1]
-        boxes[:, 0::2] = width - boxes[:, 2::-2]
+        boxes[:, 0::2] = width - boxes[:, -2::-2]
     
     if random.random() < prob:
         image = image[::-1, :]
-        boxes[:, 1::2] = height - boxes[:, 3::-2]
+        boxes[:, 1::2] = height - boxes[:, -1::-2]
 
     return image, boxes
 

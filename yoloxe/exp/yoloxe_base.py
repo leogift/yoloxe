@@ -380,5 +380,5 @@ class Exp(BaseExp):
             num_kpts=self.num_kpts,
         )
 
-    def eval(self, model, evaluator, half=False):
-        return evaluator.evaluate(model, half)
+    def eval(self, model, evaluator):
+        return evaluator.evaluate(model)

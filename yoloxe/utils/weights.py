@@ -8,7 +8,7 @@ def initialize_weights(module, prior_prob=1e-2):
             if m.bias is not None:
                 fan_in, _ = nn.init._calculate_fan_in_and_fan_out(m.weight)
                 bound = 1 / math.sqrt(fan_in)
-                nn.init.uniform_(m.bias, -bound, bound)  #均匀分布 该E=0 D=0
+                nn.init.uniform_(m.bias, -bound, bound)
 
         elif isinstance(m, nn.Linear):
             nn.init.xavier_uniform(m.weight)

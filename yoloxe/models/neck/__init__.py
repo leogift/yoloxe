@@ -4,3 +4,4 @@
 
 from .yolo_neck_fpn import YOLONeckFPN
 from .regnet_neck_pan import RegnetNeckPAN
+from .resnet_neck_pan import ResnetNeckPAN
