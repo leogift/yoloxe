@@ -2,6 +2,7 @@
 # -*- coding:utf-8 -*-
 # Copyright (c) Hanqtech Inc. All rights reserved.
 
+from .anchor import *
 from .boxes import *
 from .checkpoint import load_ckpt, save_checkpoint
 from .compat import *
