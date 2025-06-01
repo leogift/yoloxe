@@ -4,7 +4,7 @@
 import torch
 from torch import nn
 
-from yoloxe.models.network_blocks import get_activation, C2PPLayer, C2aLayer
+from yoloxe.models.network_blocks import C2aLayer
 from yoloxe.utils import initialize_weights
 
 import ssl

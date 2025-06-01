@@ -7,13 +7,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
+
 # focal loss
 class FocalLoss(nn.Module):
     def __init__(self, gamma=2.0, alpha=0.25, reduction="none"):
         super().__init__()
-        assert reduction in [ None, 'none', 'mean', 'sum']
         self.gamma = gamma
         self.alpha = alpha
+        assert reduction in [ None, 'none', 'mean', 'sum']
         self.reduction = reduction
 
     '''
@@ -22,7 +23,7 @@ class FocalLoss(nn.Module):
         target: tensor
     '''
     def forward(self, pred, target):
-        assert pred.shape[0] == target.shape[0], \
+        assert pred.shape == target.shape, \
             f"expect {pred.shape} == {target.shape}"
         if pred.shape[0] == 0:
             loss = torch.ones([1, target.shape[1:]], device=pred.device) * target.shape[1:]
@@ -35,7 +36,8 @@ class FocalLoss(nn.Module):
             alpha_factor = target * self.alpha + (1 - target) * (1 - self.alpha)
             weight = alpha_factor * weight
             loss = weight * F.binary_cross_entropy_with_logits(
-                pred, target, reduction="none")
+                pred, target, 
+                reduction="none")
 
         if self.reduction == "sum":
             loss = loss.sum()
@@ -51,17 +53,18 @@ class UncertaintyLoss(nn.Module):
         self.weight = nn.Parameter(torch.tensor(0.0), requires_grad=True)
 
     def forward(self, loss, factor=1):
-        return factor*torch.exp(-self.weight)*loss + F.relu(self.weight)
+        return F.relu(factor*torch.exp(-self.weight)*loss + self.weight)
 
-# aiou/giou/ciou/diou
+# iou/giou/ciou/diou
 class IOULoss(nn.Module):
     def __init__(self, loss_type="fusion", reduction="none"):
         super().__init__()
+        assert reduction in [ None, 'none', 'mean', 'sum']
         self.reduction = reduction
         self.loss_type = loss_type
 
     def forward(self, pred, target, eps=1e-7):
-        assert pred.shape[0] == target.shape[0]
+        assert pred.shape == target.shape
 
         pred = pred.view(-1, 4)
         target = target.view(-1, 4)
@@ -78,11 +81,8 @@ class IOULoss(nn.Module):
             )
 
             area_i = torch.prod(br - tl, 1) * (tl < br).type(tl.type()).prod(dim=1)
-            area_u = torch.prod(pred[:, 2:], 1)+torch.prod(target[:, 2:], 1)-area_i
+            area_u = torch.prod(pred[:, 2:], 1)+torch.prod(target[:, 2:], 1) - area_i
             iou = area_i / area_u.clamp(eps)
-
-            if self.loss_type in ['iou', 'fusion']:
-                iou = iou**2
 
             c_tl = torch.min(
                 (pred[:, :2] - pred[:, 2:] / 2), (target[:, :2] - target[:, 2:] / 2)
@@ -128,7 +128,7 @@ class OKSLoss(nn.Module):
         kpts_weight = torch.clip(kpts_weight, 0.5, 4.0)
         self.sigmas = torch.tensor([1/num_kpts]*num_kpts) / kpts_weight
         self.reduction = reduction
-        self.dist_loss = nn.MSELoss(reduction="none")
+        self.dist_loss = nn.SmoothL1Loss(reduction="none")
         self.conf_loss = FocalLoss(reduction="none")
 
     def forward(self, kpts_pred, kpts_conf_pred, \

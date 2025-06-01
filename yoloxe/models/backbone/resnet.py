@@ -20,7 +20,7 @@ class Resnet(nn.Module):
         act="silu",
         pp_repeats=0,
         transformer=False,
-        heads=16,
+        heads=8,
         drop_rate=0.,
     ):
         super().__init__()

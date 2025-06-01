@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
-# Copyright (c) Megvii, Inc. and its affiliates.
+# Copyright (c) Hanqtech, Inc. and its affiliates.
 
 import argparse
-import os
 from loguru import logger
 
 import torch
@@ -24,7 +23,7 @@ def make_parser():
         "--output", default="output", type=str, help="output node name of onnx model"
     )
     parser.add_argument(
-        "-s", "--opset", default=10, type=int, help="onnx opset version"
+        "-s", "--opset", default=11, type=int, help="onnx opset version"
     )
     parser.add_argument("-b", "--batch-size", type=int, default=1, help="batch size")
     parser.add_argument("--no-onnxsim", action="store_true", help="use onnxsim or not")

@@ -13,7 +13,7 @@ class YOLOXE(nn.Module):
     and detection results during test.
     """
 
-    def __init__(self, preproc=None, backbone=None, neck=None, head=None, aux_list=[]):
+    def __init__(self, preproc=None, backbone=None, neck=None, head=None, aux_head_list=[]):
         super().__init__()
 
         # preproc
@@ -23,24 +23,23 @@ class YOLOXE(nn.Module):
         # neck
         self.neck = nn.Identity() if neck is None else neck
         self.head = nn.Identity() if head is None else head
-        self.aux_list = nn.ModuleList()
-        for aux in aux_list:
-            self.aux_list.append(aux)
+        self.aux_head_list = nn.ModuleList()
+        for aux in aux_head_list:
+            self.aux_head_list.append(aux)
 
     def forward(self, x, targets=None, kwargs={}):
         inputs = {"input":x}
         inputs = self.preproc(inputs)
         inputs = self.backbone(inputs)
         inputs = self.neck(inputs)
-
         if self.training:
             assert targets is not None
 
             outputs = self.head(inputs, kwargs)
             losses = self.head.get_losses(outputs, targets)
 
-            for aux in self.aux_list:
-                aux_outputs = aux(inputs, kwargs)
+            for aux_head in self.aux_head_list:
+                aux_outputs = aux_head(inputs, kwargs)
                 aux_losses = self.head.get_losses(aux_outputs, targets)
                 if "total_loss" in losses and "total_loss" in aux_losses:
                     losses["total_loss"] += aux_losses["total_loss"]*0.1

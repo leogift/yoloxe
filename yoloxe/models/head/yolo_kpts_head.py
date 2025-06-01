@@ -60,13 +60,22 @@ class YOLOKPTSHead(YOLOHead):
                 )
             )
             self.kpts_convs.append(
-                BaseConv(
-                    in_channels=int(in_channels[0] / 2),
-                    out_channels=int(in_channels[0] / 2),
-                    ksize=3,
-                    stride=1,
-                    act=act,
-                )
+                nn.Sequential(*[
+                    BaseConv(
+                        in_channels=int(in_channels[0] / 2),
+                        out_channels=int(in_channels[0] / 2),
+                        ksize=3,
+                        stride=1,
+                        act=act,
+                    ),
+                    BaseConv(
+                        in_channels=int(in_channels[0] / 2),
+                        out_channels=int(in_channels[0] / 2),
+                        ksize=3,
+                        stride=1,
+                        act=act,
+                    )
+                ])
             )
             self.kpts_preds.append(
                 nn.Conv2d(
@@ -250,6 +259,7 @@ class YOLOKPTSHead(YOLOHead):
                 gt_kpts_conf_per_image = labels[batch_idx, :num_gt, 5+self.num_kpts*2:]
                 bboxes_preds_per_image = bbox_preds[batch_idx]
 
+                torch.cuda.empty_cache()
                 try:
                     (
                         gt_matched_classes,
@@ -330,23 +340,23 @@ class YOLOKPTSHead(YOLOHead):
         iou_loss = self.iou_loss(bbox_preds.view(-1, 4)[fg_masks], bbox_targets)
         iou_loss = iou_loss.sum() / num_fg + iou_loss.max() * 0.1
         obj_loss = self.obj_loss(obj_preds.view(-1, 1), obj_targets)
-        obj_loss = obj_loss.sum() / num_fg + obj_loss.max() * 0.1
+        obj_loss = obj_loss.sum() / num_fg
         cls_loss = self.cls_loss(cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets)
-        cls_loss = cls_loss.sum() / num_fg + cls_loss.max() * 0.1
+        cls_loss = cls_loss.sum() / num_fg
 
         kpts_loss, kpts_conf_loss = self.kpts_oks_loss(
             kpts_preds.view(-1, 2*self.num_kpts)[fg_masks], kpts_conf_preds.view(-1, self.num_kpts)[fg_masks],
             kpts_targets, kpts_conf_targets, bbox_targets
         )
         kpts_loss = kpts_loss.sum() / num_fg + kpts_loss.max() * 0.1
-        kpts_conf_loss = kpts_conf_loss.sum() / num_fg + kpts_conf_loss.max() * 0.1
+        kpts_conf_loss = kpts_conf_loss.sum() / num_fg
 
         if not self.aux_head:
             # uncertainty loss
             iou_loss = self.bbox_uncertainty(iou_loss, 5)
             obj_loss = self.obj_uncertainty(obj_loss)
-            cls_loss = self.cls_uncertainty(cls_loss)
-            kpts_loss = self.kpts_uncertainty(kpts_loss, 5)
+            cls_loss = self.cls_uncertainty(cls_loss, 0.5)
+            kpts_loss = self.kpts_uncertainty(kpts_loss, 10)
             kpts_conf_loss = self.kpts_conf_uncertainty(kpts_conf_loss)
 
         loss = iou_loss + obj_loss + cls_loss \

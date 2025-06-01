@@ -4,4 +4,3 @@
 
 from .yolo_head import YOLOHead
 from .yolo_kpts_head import YOLOKPTSHead
-from .yolo_kpts_head_split import YOLOKPTSHeadSplit

@@ -20,7 +20,7 @@ def make_parser():
         "--image_path",
         type=str,
         default='tools/wesine.png',
-        help="Path to your input image.",
+        help="Path to your test input image.",
     )
     parser.add_argument(
         "-p",
@@ -29,24 +29,6 @@ def make_parser():
         default="rk3588",
         help="platform for inference.",
     )
-    parser.add_argument(
-        "--input_mean",
-        type=str,
-        default="0,0,0",
-        help="Specify an input shape for inference.",
-    )
-    parser.add_argument(
-        "--input_std",
-        type=str,
-        default="1,1,1",
-        help="Specify an input shape for inference.",
-    )
-    parser.add_argument("--bgr", 
-        action="store_true", 
-        default=False,
-        help="Specify an input shape for inference.",
-    )
-    
     parser.add_argument(
         "-q",
         "--quantization",
@@ -60,16 +42,13 @@ def make_parser():
 
 if __name__ == '__main__':
     args = make_parser().parse_args()
-    input_mean = list(map(int, args.input_mean.split(',')))
-    input_std = list(map(int, args.input_std.split(',')))
 
     # Create RKNN object
     rknn = RKNN(verbose=True)
     # RKNN config
     print('--> Config model')
-    rknn.config(mean_values=[input_mean], std_values=[input_std], \
-                quant_img_RGB2BGR=args.bgr, target_platform=args.platform, optimization_level=2, \
-                quantized_algorithm="normal", \
+    rknn.config(quant_img_RGB2BGR=True, target_platform=args.platform, optimization_level=2, \
+                quantized_algorithm="kl_divergence", \
                 enable_flash_attention=True, \
                 disable_rules=['fuse_mul_into_matmul']
             )
@@ -85,7 +64,7 @@ if __name__ == '__main__':
 
     # Build model
     print('--> Building model')
-    ret = rknn.build(do_quantization=True if args.quantization!=None else False, 
+    ret = rknn.build(do_quantization=args.quantization!=None, 
                     dataset=args.quantization)
     if ret != 0:
         print('Build model failed!')
@@ -111,6 +90,7 @@ if __name__ == '__main__':
         exit(ret)
     print('done')
 
+    # 精度测量
     rknn.accuracy_analysis(inputs=[args.image_path], output_dir='./snapshot')
 
     rknn.release()

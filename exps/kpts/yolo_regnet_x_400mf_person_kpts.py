@@ -6,7 +6,7 @@ import os
 import torch
 import torch.nn as nn
 
-from yoloxe.exp import Exp as MyExp
+from yoloxe.exp import Exp as BaseExp
 
 from loguru import logger
 
@@ -16,7 +16,7 @@ from yoloxe.utils.anchor import COCO2Anchors
 
 _CKPT_FULL_PATH = "weights/yolo_regnet_x_400mf_coco.pth"
 
-class Exp(MyExp):
+class Exp(BaseExp):
     def __init__(self):
         super(Exp, self).__init__()
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
@@ -39,28 +39,25 @@ class Exp(MyExp):
         self.basic_lr_per_img = 0.001 / 64.0
 
         self.act = "relu"
-        self.max_epoch = 60
+        self.max_epoch = 120
 
         self.model_name = "regnet_x_400mf"
 
         self.warmup_epochs = 10
-        self.no_aug_epochs = 5
+        self.no_aug_epochs = 10
         self.data_num_workers = 8
+        self.eval_epoch_interval = 5
 
-        self.mosaic_prob = 0
-        self.mixup_prob = 0
         self.flip_prob = 0
-        self.degrees = 15
+        self.degrees = 45
 
     def get_model(self):
 
         if "model" not in self.__dict__:
             from yoloxe.models import YOLOXE, \
-                BaseNorm, \
-                Regnet, \
-                YOLONeckFPN, RegnetNeckPAN, \
-                YOLOKPTSHead, \
-                C2kLayer
+            BaseNorm, Regnet, YOLONeckFPN, RegnetNeckPAN, \
+            YOLOKPTSHead, \
+            C2aLayer, C2kLayer
 
             scales = None
 
@@ -84,8 +81,7 @@ class Exp(MyExp):
                 self.model_name,
                 act=self.act,
                 pp_repeats=pp_repeats, 
-                transformer=False,
-                heads=4,
+                transformer=True,
                 drop_rate=0.1,
             )
             self.channels = backbone.output_channels[-3:]
@@ -93,7 +89,7 @@ class Exp(MyExp):
                 YOLONeckFPN(
                     in_channels=self.channels,
                     act=self.act,
-                    layer_type=C2kLayer,
+                    layer_type=C2aLayer,
                     simple_reshape=True,
                     n=1
                 ),
@@ -102,7 +98,7 @@ class Exp(MyExp):
                     in_channels=self.channels,
                     act=self.act, 
                     layer_type=C2kLayer,
-                    n=1
+                    n=2
                 )
             ])
             head = YOLOKPTSHead(
@@ -116,16 +112,7 @@ class Exp(MyExp):
                 kpts_weight=self.kpts_weight
             )
 
-            aux_list = [
-                YOLOKPTSHead(
-                    self.num_classes,
-                    in_features=("backbone3", "backbone4", "backbone5"),
-                    in_channels=self.channels,
-                    scales=scales, 
-                    act=self.act,
-                    aux_head=True,
-                    num_kpts=self.num_kpts,
-                ),
+            aux_head_list = [
                 YOLOKPTSHead(
                     self.num_classes,
                     in_features=("fpn3", "fpn4", "fpn5"),
@@ -142,15 +129,16 @@ class Exp(MyExp):
                 backbone=backbone,  
                 neck=neck, 
                 head=head,
-                aux_list=aux_list,
+                aux_head_list=aux_head_list,
             )
 
-        ckpt = torch.load(_CKPT_FULL_PATH, map_location="cpu")
+        ckpt = torch.load(_CKPT_FULL_PATH, map_location="cpu", weights_only=False)
         if "model" in ckpt:
             ckpt = ckpt["model"]
 
         for k in list(ckpt.keys()):
-            if "cls_preds" in k:
+            if "pred" in k \
+                or "loss" in k or "Loss" in k:
                 del ckpt[k]
 
         incompatible = self.model.load_state_dict(ckpt, strict=False)

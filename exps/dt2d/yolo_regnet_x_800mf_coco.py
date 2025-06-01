@@ -6,7 +6,7 @@ import os
 import torch
 import torch.nn as nn
 
-from yoloxe.exp import Exp as MyExp
+from yoloxe.exp import Exp as BaseExp
 
 from loguru import logger
 
@@ -16,7 +16,7 @@ from yoloxe.utils.anchor import COCO2Anchors
 
 _CKPT_FULL_PATH = "weights/yolo_regnet_x_800mf_coco.pth"
 
-class Exp(MyExp):
+class Exp(BaseExp):
     def __init__(self):
         super(Exp, self).__init__()
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
@@ -35,7 +35,7 @@ class Exp(MyExp):
         self.basic_lr_per_img = 0.001 / 64.0
 
         self.act = "relu"
-        self.max_epoch = 60
+        self.max_epoch = 120
 
         self.model_name = "regnet_x_800mf"
 
@@ -49,11 +49,9 @@ class Exp(MyExp):
 
         if "model" not in self.__dict__:
             from yoloxe.models import YOLOXE, \
-                BaseNorm, \
-                Regnet, \
-                YOLONeckFPN, RegnetNeckPAN, \
-                YOLOHead, \
-                C2kLayer
+            BaseNorm, Regnet, YOLONeckFPN, RegnetNeckPAN, \
+            YOLOHead, \
+            C2aLayer, C2kLayer
 
             scales = None
 
@@ -78,7 +76,6 @@ class Exp(MyExp):
                 act=self.act,
                 pp_repeats=pp_repeats, 
                 transformer=True,
-                heads=4,
                 drop_rate=0.1,
             )
             self.channels = backbone.output_channels[-3:]
@@ -86,9 +83,9 @@ class Exp(MyExp):
                 YOLONeckFPN(
                     in_channels=self.channels,
                     act=self.act,
-                    layer_type=C2kLayer,
+                    layer_type=C2aLayer,
                     simple_reshape=False,
-                    n=2
+                    n=1
                 ),
                 RegnetNeckPAN(
                     self.model_name,
@@ -107,15 +104,7 @@ class Exp(MyExp):
                 softmax=True,
             )
 
-            aux_list = [
-                YOLOHead(
-                    self.num_classes,
-                    in_features=("backbone3", "backbone4", "backbone5"),
-                    in_channels=self.channels,
-                    scales=scales, 
-                    act=self.act,
-                    aux_head=True,
-                ),
+            aux_head_list = [
                 YOLOHead(
                     self.num_classes,
                     in_features=("fpn3", "fpn4", "fpn5"),
@@ -131,16 +120,17 @@ class Exp(MyExp):
                 backbone=backbone,  
                 neck=neck, 
                 head=head,
-                aux_list=aux_list,
+                aux_head_list=aux_head_list,
             )
 
-        ckpt = torch.load(_CKPT_FULL_PATH, map_location="cpu")
+        ckpt = torch.load(_CKPT_FULL_PATH, map_location="cpu", weights_only=False)
         if "model" in ckpt:
             ckpt = ckpt["model"]
 
-        # for k in list(ckpt.keys()):
-        #     if "cls_preds" in k:
-        #         del ckpt[k]
+        for k in list(ckpt.keys()):
+            if "pred" in k \
+                or "loss" in k or "Loss" in k:
+                del ckpt[k]
 
         incompatible = self.model.load_state_dict(ckpt, strict=False)
         logger.info("missing_keys:")

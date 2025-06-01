@@ -42,7 +42,7 @@ class Trainer:
         self.max_epoch = exp.max_epoch
         self.warmup_epochs = exp.warmup_epochs
         self.amp_training = args.fp16
-        self.scaler = torch.cuda.amp.GradScaler(enabled=args.fp16)
+        self.scaler = torch.amp.GradScaler("cuda", enabled=args.fp16)
         self.is_distributed = get_world_size() > 1
         self.rank = get_rank()
         self.device = "cuda:{}".format(self.rank)
@@ -93,6 +93,7 @@ class Trainer:
     def trainning_iter(self):
         data_time = 0
         iter_start_time = time.time()
+        self.optimizer.zero_grad()
         for _ in range(self.exp.grad_accum):
             data_start_time = time.time()
 
@@ -102,21 +103,18 @@ class Trainer:
             targets = targets.type(self.data_type)
             targets.requires_grad = False
             inps, targets = self.exp.preprocess(inps, targets, self.input_size)
+            
             data_end_time = time.time()
             data_time += (data_end_time - data_start_time)
 
-            with torch.cuda.amp.autocast(enabled=self.amp_training):
+            with torch.amp.autocast("cuda", enabled=self.amp_training):
                 outputs = self.model(inps, targets)
-
-            loss = outputs["total_loss"]
-
+                loss = outputs["total_loss"]
+            
             self.scaler.scale(loss).backward()
 
-        self.scaler.unscale_(self.optimizer)
-        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=10.0)
         self.scaler.step(self.optimizer)
         self.scaler.update()
-        self.optimizer.zero_grad()
 
         if self.use_model_ema:
             self.ema_model.update(self.model)
@@ -329,7 +327,7 @@ class Trainer:
             else:
                 ckpt_file = self.args.ckpt
 
-            ckpt = torch.load(ckpt_file, map_location=self.device)
+            ckpt = torch.load(ckpt_file, map_location=self.device, weights_only=False)
             # resume the model/optimizer state dict
             model.load_state_dict(ckpt["model"])
             self.optimizer.load_state_dict(ckpt["optimizer"])
@@ -371,7 +369,6 @@ class Trainer:
                 )
         
         if self.rank == 0:
-            metrics = {}
             eval_info = eval_results["eval_info"]
             eval_metrics = eval_results["eval_metrics"]
 
@@ -387,7 +384,7 @@ class Trainer:
 
             logger.info("Current metric score is  {}".format(metric_mean))
             logger.info("Best metric score is  {}".format(self.best_metric_mean))
-            
+
             self.save_ckpt("last_epoch", update_best_ckpt)
             if self.save_history_ckpt:
                 self.save_ckpt(f"epoch_{self.epoch + 1}")

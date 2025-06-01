@@ -56,13 +56,22 @@ class YOLOHead(nn.Module):
                 )
             )
             self.reg_convs.append(
-                BaseConv(
-                    in_channels=int(in_channels[0] / 2),
-                    out_channels=int(in_channels[0] / 2),
-                    ksize=3,
-                    stride=1,
-                    act=act,
-                )
+                nn.Sequential(*[
+                    BaseConv(
+                        in_channels=int(in_channels[0] / 2),
+                        out_channels=int(in_channels[0] / 2),
+                        ksize=3,
+                        stride=1,
+                        act=act,
+                    ),
+                    BaseConv(
+                        in_channels=int(in_channels[0] / 2),
+                        out_channels=int(in_channels[0] / 2),
+                        ksize=3,
+                        stride=1,
+                        act=act,
+                    )
+                ])
             )
             self.reg_preds.append(
                 nn.Conv2d(
@@ -131,7 +140,7 @@ class YOLOHead(nn.Module):
             reg_stem_x = self.reg_stems[k](x)
             if not self.aux_head:
                 reg_stem_x = reg_conv(reg_stem_x)
-            
+
             reg_xywh = torch.sigmoid(reg_pred(reg_stem_x))
             obj_conf = obj_pred(reg_stem_x)
 
@@ -279,6 +288,7 @@ class YOLOHead(nn.Module):
                 gt_bboxes_per_image = labels[batch_idx, :num_gt, 1:5]
                 bboxes_preds_per_image = bbox_preds[batch_idx]
 
+                torch.cuda.empty_cache()
                 try:
                     (
                         gt_matched_classes,
@@ -353,15 +363,15 @@ class YOLOHead(nn.Module):
         iou_loss = self.iou_loss(bbox_preds.view(-1, 4)[fg_masks], bbox_targets)
         iou_loss = iou_loss.sum() / num_fg + iou_loss.max() * 0.1
         obj_loss = self.obj_loss(obj_preds.view(-1, 1), obj_targets)
-        obj_loss = obj_loss.sum() / num_fg + obj_loss.max() * 0.1
+        obj_loss = obj_loss.sum() / num_fg
         cls_loss = self.cls_loss(cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets)
-        cls_loss = cls_loss.sum() / num_fg + cls_loss.max() * 0.1
+        cls_loss = cls_loss.sum() / num_fg
 
         if not self.aux_head:
             # uncertainty loss
             iou_loss = self.bbox_uncertainty(iou_loss, 5)
             obj_loss = self.obj_uncertainty(obj_loss)
-            cls_loss = self.cls_uncertainty(cls_loss)
+            cls_loss = self.cls_uncertainty(cls_loss, 0.5)
 
         loss = iou_loss + obj_loss + cls_loss
 
@@ -437,7 +447,8 @@ class YOLOHead(nn.Module):
             gt_bboxes_per_image = gt_bboxes_per_image.cpu()
             bboxes_preds_per_image = bboxes_preds_per_image.cpu()
         pair_wise_ious = bboxes_iou(gt_bboxes_per_image, bboxes_preds_per_image, False)
-        pair_wise_ious_loss = ((1 - pair_wise_ious).clamp(min=0) * 2)**2
+        pair_wise_ious = (pair_wise_ious + 1)/2
+        pair_wise_ious_loss = -torch.log(pair_wise_ious + 1e-8)
 
         gt_cls_per_image = (
             F.one_hot(gt_classes.to(torch.int64), self.num_classes)
@@ -464,7 +475,7 @@ class YOLOHead(nn.Module):
 
         cost = (
             pair_wise_cls_loss # 0~num_classes
-            + 100. * pair_wise_ious_loss # 0~100
+            + 10. * pair_wise_ious_loss # 0~180
             + float(1e4) * (~geometry_relation) # 0 or 1e4
         )
         
@@ -528,6 +539,10 @@ class YOLOHead(nn.Module):
         topk_ious, _ = torch.topk(pair_wise_ious, n_candidate_k, dim=1)
         dynamic_ks = torch.clamp(topk_ious.sum(1).int(), 1)
         for gt_idx in range(num_gt):
+            if n_candidate_k < 1:
+                break
+            if gt_idx >= dynamic_ks.size(dim=0):
+                break
             _, pos_idx = torch.topk(
                 cost[gt_idx], k=dynamic_ks[gt_idx].item(), largest=False
             )
